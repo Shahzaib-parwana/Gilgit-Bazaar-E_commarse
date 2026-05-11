@@ -1,0 +1,17 @@
+{% extends 'emails/base.html' %}
+
+{% block content %}
+<h2>Payment Confirmed</h2>
+<p>Hi {{ order.shipping_name }},</p>
+<p>We've received your payment for order {{ order.order_number }}.</p>
+
+<div class="order-details">
+    <h3>Payment Details</h3>
+    <p><strong>Order Number:</strong> {{ order.order_number }}</p>
+    <p><strong>Amount Paid:</strong> PKR {{ order.total }}</p>
+    <p><strong>Payment Method:</strong> {{ order.get_payment_method_display }}</p>
+    <p><strong>Payment Date:</strong> {{ order.paid_at|date:"F d, Y" }}</p>
+</div>
+
+<p>Your order is now being processed and will be shipped soon.</p>
+{% endblock %}

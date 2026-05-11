@@ -1,0 +1,25 @@
+from django.contrib import admin
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    path('api/auth/', include('apps.accounts.urls')),
+    path('api/products/', include('apps.products.urls')),
+    path('api/cart/', include('apps.cart.urls')),
+    path('api/orders/', include('apps.orders.urls')),
+    path('api/payments/', include('apps.payments.urls')),
+    path('api/wishlist/', include('apps.wishlist.urls')),
+    path('api/notifications/', include('apps.notifications.urls')),
+    path('api/', include('apps.reviews.urls')),
+    path('api/site-settings/', include('apps.site_settings.urls')),
+    path('api/our-story/', include('apps.our_story.urls')),
+    path('api/about/', include('apps.about.urls')),
+    path('api/contact/', include('apps.contact.urls')),
+    path('api/newsletter/', include('apps.newsletter.urls')),
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Email Preview</title>
+    <style>
+        body {
+            background: #f3f4f6;
+            padding: 20px;
+            font-family: Arial;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>{{ template.name }}</h2>
+        <hr>
+        <div>
+            {{ html_content|safe }}
+        </div>
+    </div>
+</body>
+</html>
