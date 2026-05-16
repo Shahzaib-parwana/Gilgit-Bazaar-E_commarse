@@ -1,13 +1,15 @@
 import { useState, useContext } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
+import VerifyCodeForm from './VerifyCodeForm';
 
 const LoginForm = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext);
+  const { login, googleLogin, needsVerification, pendingEmail, verifyEmail, resendVerification } = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -16,6 +18,8 @@ const LoginForm = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState('');
 
   const validateForm = () => {
     const newErrors = {};
@@ -46,9 +50,14 @@ const LoginForm = () => {
     setLoading(true);
 
     try {
-      await login(formData);
-      const redirect = searchParams.get('redirect') || '/';
-      navigate(redirect);
+      const result = await login(formData);
+      if (result.requiresVerification) {
+        setVerificationEmail(result.email);
+        setShowVerification(true);
+      } else if (result.success) {
+        const redirect = searchParams.get('redirect') || '/';
+        navigate(redirect);
+      }
     } catch (error) {
       console.error('Login error:', error);
     } finally {
@@ -69,6 +78,44 @@ const LoginForm = () => {
       }));
     }
   };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const result = await googleLogin(credentialResponse.credential);
+      if (result.success) {
+        const redirect = searchParams.get('redirect') || '/';
+        navigate(redirect);
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+    }
+  };
+
+  const handleGoogleError = () => {
+    toast.error('Google sign in failed. Please try again.');
+  };
+
+  // Show verification UI if needed from context or after login
+  if (showVerification || (needsVerification && pendingEmail)) {
+    const emailToVerify = verificationEmail || pendingEmail;
+    return (
+      <VerifyCodeForm 
+        email={emailToVerify}
+        onVerify={async (email, code) => {
+          const result = await verifyEmail(email, code);
+          if (result.success) {
+            setShowVerification(false);
+            const redirect = searchParams.get('redirect') || '/';
+            navigate(redirect);
+          }
+          return result;
+        }}
+        onResend={async (email) => {
+          await resendVerification(email);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="login-form-wrap">
@@ -287,6 +334,19 @@ const LoginForm = () => {
           text-decoration: underline;
         }
 
+        .google-btn-wrapper {
+          margin-bottom: 24px;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+
         @media (max-width: 600px) {
           .login-card { padding: 28px 20px; }
           .login-header h2 { font-size: 1.8rem; }
@@ -297,6 +357,24 @@ const LoginForm = () => {
         <div className="login-header">
           <h2>Welcome Back</h2>
           <p>Sign in to your account</p>
+        </div>
+
+        {/* Google Sign In Button */}
+        <div className="google-btn-wrapper">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            useOneTap
+            theme="filled_black"
+            shape="pill"
+            text="signin_with"
+            locale="en"
+            width="100%"
+          />
+        </div>
+
+        <div className="divider">
+          <span>or sign in with email</span>
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -356,7 +434,7 @@ const LoginForm = () => {
           <button type="submit" disabled={loading} className="btn-submit">
             {loading ? (
               <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>

@@ -1,12 +1,14 @@
 import { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, User, Phone, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
+import { GoogleLogin } from '@react-oauth/google';
 import toast from 'react-hot-toast';
+import VerifyCodeForm from './VerifyCodeForm';
 
 const RegisterForm = () => {
   const navigate = useNavigate();
-  const { register } = useContext(AuthContext);
+  const { register, verifyEmail, resendVerification, needsVerification, pendingEmail, googleLogin } = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -22,6 +24,7 @@ const RegisterForm = () => {
   const [showPassword2, setShowPassword2] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [verificationSent, setVerificationSent] = useState(false);
 
   const validateForm = () => {
     const newErrors = {};
@@ -38,12 +41,14 @@ const RegisterForm = () => {
       newErrors.username = 'Username is required';
     } else if (formData.username.length < 3) {
       newErrors.username = 'Username must be at least 3 characters';
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      newErrors.username = 'Username can only contain letters, numbers, and underscores';
     }
 
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+      newErrors.email = 'Please enter a valid email address';
     }
 
     if (!formData.password) {
@@ -70,8 +75,12 @@ const RegisterForm = () => {
     setLoading(true);
 
     try {
-      await register(formData);
-      navigate('/');
+      const result = await register(formData);
+      if (result.requiresVerification) {
+        setVerificationSent(true);
+      } else if (result.success) {
+        navigate('/');
+      }
     } catch (error) {
       console.error('Registration error:', error);
     } finally {
@@ -93,11 +102,172 @@ const RegisterForm = () => {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const result = await googleLogin(credentialResponse.credential);
+      if (result.success) {
+        navigate('/');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+    }
+  };
+
+  const handleGoogleError = () => {
+    toast.error('Google sign in failed. Please try again.');
+  };
+
+  // Show verification UI if needed from context
+  if (needsVerification && pendingEmail) {
+    return (
+      <VerifyCodeForm 
+        email={pendingEmail}
+        onVerify={async (email, code) => {
+          const result = await verifyEmail(email, code);
+          if (result.success) {
+            navigate('/');
+          }
+          return result;
+        }}
+        onResend={async (email) => {
+          await resendVerification(email);
+        }}
+      />
+    );
+  }
+
+  // Show verification sent UI
+  if (verificationSent) {
+    return (
+      <div className="register-form-wrap">
+        <style>{`
+          .register-form-wrap {
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            font-family: 'DM Sans', sans-serif;
+            position: relative;
+            z-index: 2;
+          }
+
+          .register-card {
+            background: var(--navy-2);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 28px;
+            padding: 40px 36px;
+            box-shadow: 0 25px 45px -12px rgba(0,0,0,0.5);
+            backdrop-filter: blur(2px);
+            animation: fadeUp 0.6s ease forwards;
+            text-align: center;
+          }
+
+          @keyframes fadeUp {
+            from {
+              opacity: 0;
+              transform: translateY(30px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          .register-header {
+            margin-bottom: 32px;
+          }
+
+          .register-header h2 {
+            font-family: 'Playfair Display', serif;
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--gold) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+          }
+
+          .register-header p {
+            color: var(--muted);
+            font-size: 0.9rem;
+          }
+
+          .email-badge {
+            background: rgba(240,165,0,0.1);
+            border: 1px solid rgba(240,165,0,0.3);
+            border-radius: 12px;
+            padding: 12px;
+            margin: 20px 0;
+            display: inline-block;
+            color: var(--gold);
+            font-weight: 500;
+          }
+
+          .login-link {
+            margin-top: 24px;
+            text-align: center;
+          }
+
+          .login-link a {
+            color: var(--gold);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+          }
+
+          .login-link a:hover {
+            color: var(--gold-light);
+            text-decoration: underline;
+          }
+        `}</style>
+
+        <div className="register-card">
+          <div className="register-header">
+            <h2>Check Your Email</h2>
+            <p>We've sent a verification code to</p>
+            <div className="email-badge">{formData.email}</div>
+          </div>
+          
+          <div style={{ margin: '30px 0' }}>
+            <div style={{ 
+              background: 'rgba(240,165,0,0.1)', 
+              borderRadius: '12px', 
+              padding: '20px',
+              marginBottom: '20px'
+            }}>
+              <Mail size={48} style={{ color: 'var(--gold)', marginBottom: '15px' }} />
+              <p>Please enter the 6-digit verification code sent to your email.</p>
+              <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginTop: '10px' }}>
+                The code will expire in 24 hours.
+              </p>
+            </div>
+            
+            <VerifyCodeForm 
+              email={formData.email}
+              onVerify={async (email, code) => {
+                const result = await verifyEmail(email, code);
+                if (result.success) {
+                  navigate('/');
+                }
+                return result;
+              }}
+              onResend={async (email) => {
+                await resendVerification(email);
+              }}
+            />
+          </div>
+          
+          <div className="login-link">
+            <Link to="/login">← Back to Login</Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="register-form-wrap">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap');
-
         .register-form-wrap {
           width: 100%;
           max-width: 680px;
@@ -312,6 +482,42 @@ const RegisterForm = () => {
           text-decoration: underline;
         }
 
+        /* Google Button Styles */
+        .google-btn-wrapper {
+          margin-bottom: 24px;
+        }
+        .or-divider {
+          margin: 24px 0;
+          position: relative;
+          text-align: center;
+        }
+        .or-divider::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: rgba(255,255,255,0.1);
+        }
+        .or-divider span {
+          background: var(--navy-2);
+          padding: 0 16px;
+          font-size: 0.85rem;
+          color: var(--muted);
+          position: relative;
+          z-index: 1;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .animate-spin {
+          animation: spin 1s linear infinite;
+        }
+
         @media (max-width: 640px) {
           .register-card { padding: 28px 20px; }
           .register-header h2 { font-size: 1.8rem; }
@@ -325,8 +531,25 @@ const RegisterForm = () => {
           <p>Join Gilgit Bazaar and start shopping</p>
         </div>
 
+        {/* Google Sign In Button */}
+        <div className="google-btn-wrapper">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={handleGoogleError}
+            useOneTap
+            theme="filled_black"
+            shape="pill"
+            text="signup_with"
+            locale="en"
+            width="100%"
+          />
+        </div>
+
+        <div className="or-divider">
+          <span>or sign up with email</span>
+        </div>
+
         <form onSubmit={handleSubmit}>
-          {/* First & Last Name Row */}
           <div className="row-2cols">
             <div className="input-group">
               <label>First Name *</label>
@@ -361,7 +584,6 @@ const RegisterForm = () => {
             </div>
           </div>
 
-          {/* Username */}
           <div className="input-group">
             <label>Username *</label>
             <div className="input-wrapper">
@@ -378,7 +600,6 @@ const RegisterForm = () => {
             {errors.username && <div className="error-msg">{errors.username}</div>}
           </div>
 
-          {/* Email */}
           <div className="input-group">
             <label>Email Address *</label>
             <div className="input-wrapper">
@@ -395,7 +616,6 @@ const RegisterForm = () => {
             {errors.email && <div className="error-msg">{errors.email}</div>}
           </div>
 
-          {/* Phone (Optional) */}
           <div className="input-group">
             <label>Phone Number (Optional)</label>
             <div className="input-wrapper">
@@ -411,7 +631,6 @@ const RegisterForm = () => {
             </div>
           </div>
 
-          {/* Password Row */}
           <div className="row-2cols">
             <div className="input-group">
               <label>Password *</label>
@@ -460,7 +679,6 @@ const RegisterForm = () => {
             </div>
           </div>
 
-          {/* Terms Checkbox */}
           <div className="terms-checkbox">
             <input type="checkbox" id="terms" required />
             <label htmlFor="terms">
@@ -470,11 +688,10 @@ const RegisterForm = () => {
             </label>
           </div>
 
-          {/* Submit Button */}
           <button type="submit" disabled={loading} className="btn-submit">
             {loading ? (
               <>
-                <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>

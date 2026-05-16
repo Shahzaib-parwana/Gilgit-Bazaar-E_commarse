@@ -3,6 +3,34 @@ import api from './api';
 export const authService = {
   async register(userData) {
     const response = await api.post('/auth/register/', userData);
+    // Don't store token immediately - wait for verification
+    if (response.data.requires_verification) {
+      // Store email temporarily for verification
+      sessionStorage.setItem('pending_verification_email', response.data.email);
+    }
+    return response.data;
+  },
+
+  async verifyEmail(email, verificationCode) {
+    const response = await api.post('/auth/verify-email/', {
+      email: email,
+      verification_code: verificationCode
+    });
+    if (response.data.token) {
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      sessionStorage.removeItem('pending_verification_email');
+    }
+    return response.data;
+  },
+
+  async resendVerificationCode(email) {
+    const response = await api.post('/auth/resend-verification/', { email });
+    return response.data;
+  },
+
+  async googleLogin(idToken) {
+    const response = await api.post('/auth/google-login/', { id_token: idToken });
     if (response.data.token) {
       localStorage.setItem('token', response.data.token);
       localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -20,7 +48,11 @@ export const authService = {
   },
 
   async logout() {
-    await api.post('/auth/logout/');
+    try {
+      await api.post('/auth/logout/');
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('user');
   },
@@ -49,4 +81,12 @@ export const authService = {
   isAuthenticated() {
     return !!localStorage.getItem('token');
   },
+  
+  getPendingVerificationEmail() {
+    return sessionStorage.getItem('pending_verification_email');
+  },
+  
+  clearPendingVerification() {
+    sessionStorage.removeItem('pending_verification_email');
+  }
 };
